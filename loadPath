@@ -1,3 +1,4 @@
 #! /bin/bash
 
 PATH="./dist/build/hsglc":$PATH
+export PATH
