@@ -1,5 +1,5 @@
 -- | Our parser for 'git log'
-module GitLog.Parser where
+module GitLog.LogParser where
 
 import Text.Parsec
 import Text.Parsec.Char
