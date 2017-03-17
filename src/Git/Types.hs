@@ -25,7 +25,7 @@ readDiffAlgo = match . map toLower
 
 -- Shows DiffAlgo in a way that git understands.
 instance Show DiffAlgo where
-  show Myers     = "--myers"
-  show Minimal   = "--minimal"
-  show Histogram = "--histogram"
-  show Patience  = "--patience"
+  show Myers     = "--diff-algorithm=myers"
+  show Minimal   = "--diff-algorithm=minimal"
+  show Histogram = "--diff-algorithm=histogram"
+  show Patience  = "--diff-algorithm=patience"
