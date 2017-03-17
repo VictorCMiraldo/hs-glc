@@ -150,8 +150,9 @@ data InfoAST = InfoAST
 -- TODO: find a better way to handle these results.
 formatResult :: Result -> [String]
 formatResult (Result ast tok isMLI)
-  = formatAST ast ++ maybe ["-" , "-"] (\(a , b) -> [show a ,  showFloat b]) tok
-  ++ [ if isMLI then "1" else "0" ]
+  = [ if isMLI then "1" else "0" ]
+  ++ formatAST ast
+  ++ maybe ["-" , "-"] (\(a , b) -> [show a ,  showFloat b]) tok
 
 formatAST :: InfoAST -> [String]
 formatAST (InfoAST cN dI cn (li , lo))
