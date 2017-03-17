@@ -1,5 +1,5 @@
 -- | Our parser for 'git log'
-module GitLog.LogParser where
+module Git.LogParser where
 
 import Text.Parsec
 import Text.Parsec.Char
@@ -34,10 +34,10 @@ data GitChange
 
 data GitLogEntry
   = GitLogEntry { _commit   :: String
-              , _fin      :: String
-              , _fout     :: String
-              , _changes  :: [GitChange]
-              }
+                , _fin      :: String
+                , _fout     :: String
+                , _changes  :: [GitChange]
+                }
     deriving Show
 
 -- | Our parser runs over strings, we keep no user-state.

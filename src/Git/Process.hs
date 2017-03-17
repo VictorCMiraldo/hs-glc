@@ -1,5 +1,7 @@
 module Git.Process where
 
+import Control.Monad.Except
+
 import Git.Types
 
 import System.Process
@@ -30,3 +32,15 @@ runGitLogWithAlgo algo file
 runGitShow :: String -> IO (ExitCode , String , String)
 runGitShow hashfile
   = readProcessWithExitCode "git" ["show" , hashfile] ""
+
+-- | Runs a 'git' process in a nice env.
+runGit :: (MonadIO m , MonadError e m)
+       => (ExitCode -> String -> e) -> m (ExitCode , String , String)
+       -> m String
+runGit errf act
+  = do
+      (exit , out , err) <- act
+      if exit == ExitSuccess
+      then return out
+      else throwError (errf exit err)
+    

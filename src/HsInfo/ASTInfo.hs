@@ -9,10 +9,22 @@
 {-# LANGUAGE KindSignatures        #-}
 -- | Provides a 'astConstrs' and 'astNodes' that return
 --   the consturctor or the types of the AST in a given line range.
-module HsInfo.ASTInfo where
+module HsInfo.ASTInfo
+  ( HsModule
+  , hsParseModule , hsTokenize
+  , LineRegion(..)
+  , TyCon(..)
+  , tyconString
+  , Choice
+  , stackIn , conStackIn , typeStackIn
+  , firstTypeIn , firstConIn , allInfoIn
+  , allConsIn , allTypesIn , firstConParentOf
+  , astInfo
+  ) where
 
 import Language.Haskell.Exts.Syntax hiding (ConName)
 import Language.Haskell.Exts.Parser
+import Language.Haskell.Exts.Lexer
 import Language.Haskell.Exts.Extension
 import Language.Haskell.Exts.SrcLoc
 import Control.Monad.State
@@ -52,6 +64,14 @@ hsParseModule c
                 -- , UndecidableInstances
                 -- , FlexibleInstances
                 ]
+                
+hsTokenize :: [String] -> [String] -> Either String ([Token] , [Token])
+hsTokenize ins del
+  = let tks = ((,) <$> lexTokenStream (unlines ins)
+                   <*> lexTokenStream (unlines del))
+    in case tks of
+      ParseFailed _ s     -> Left $ s
+      ParseOk (tkI , tkD) -> Right (map unLoc tkI , map unLoc tkD)
 
 -- |A LineRegion is a starting line with an optional
 --  starting column and an endline.
