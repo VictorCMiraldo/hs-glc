@@ -108,7 +108,7 @@ parseGitChange1
     pChanges :: (Int , Int) -> P [GitChange]
     pChanges (src , dst)
       =   ((char ' ' >> skipLine >> pChanges (src + 1 , dst + 1))
-      <|> (pBlock >>= \(ins , del) -> ((GitChange (src + 1) (dst + 1) ins del) :)
+      <|> (pBlock >>= \(ins , del) -> ((GitChange src dst ins del) :)
                                   <$> pChanges (src + length del , dst + length ins))
       <|> (return [])) <?> "here"
 
