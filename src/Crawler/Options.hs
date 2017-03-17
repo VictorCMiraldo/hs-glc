@@ -15,7 +15,7 @@ data Opts
     , optInput        :: String
     , optHeader       :: Bool
     , optColBased     :: Bool
-    , optKeep0Cluster :: Bool
+    , optKeepNoChg    :: Bool
     } deriving Show
 
 defaultOpts :: String -> Opts
@@ -36,9 +36,9 @@ options =
   , Option []     ["use-columns"]
         (NoArg (\ opts -> opts { optColBased = True }))
         "\nUse columns to refine constructor analisys\n"
-  , Option ['k']     ["keep-0-cluster"]
-        (NoArg (\ opts -> opts { optKeep0Cluster = True }))
-        "\nKeeps the edits with zero clusters in the data\n"
+  , Option ['k']     ["keep-no-change"]
+        (NoArg (\ opts -> opts { optKeepNoChg = True }))
+        "\nKeeps the edits with only insertions or deletions in the data\n"
   ]
 
 compileOpts :: [String] -> IO Opts

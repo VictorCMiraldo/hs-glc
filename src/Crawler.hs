@@ -116,12 +116,18 @@ processEntry (GitLogEntry hash fin fout chg)
     isMLI :: GitChange -> Bool
     isMLI c = length (_ins c) == length (_del c)
 
+    -- Something that only inserts or deletes is not a change!
+    isNotChange :: GitChange -> Bool
+    isNotChange (GitChange _ _ [] _) = True
+    isNotChange (GitChange _ _ _ []) = True
+    isNotChange (GitChange _ _ _ _) = False
+
     processChange :: (HsModule , HsModule) -> GitChange -> CrawlerM (Maybe Result)
     processChange ms chg
       = do
-        keep0cl <- getOpt optKeep0Cluster
-        ast     <- getASTInfo ms chg
-        if not keep0cl && _astClusterN ast == 0
+        keepNoChg <- getOpt optKeepNoChg
+        ast       <- getASTInfo ms chg
+        if not keepNoChg && isNotChange chg 
         then return Nothing
         else Just <$> (Result ast <$> getTokenDiffIdx chg <*> return (isMLI chg))
         
