@@ -1,13 +1,8 @@
+-- | Our parser for 'git log'
 module GitLog.Parser where
 
 import Text.Parsec
 import Text.Parsec.Char
-
-import Control.Arrow((***))
-import Data.Char(isDigit)
-import Data.List(break, groupBy)
-
-import Control.Monad.State
 
 data UnifiedDiff = UD
   { _srcLine :: Int
@@ -26,8 +21,13 @@ instance Show UnifiedDiff where
               , "@@"
               ]
 
+-- | given a filename, generate the list of options
+--   we need to pass to 'git log' to obtain a parseable output.
+gitLogOptionsForFile :: String -> [String]
+gitLogOptionsForFile s = ["--pretty=format:%h" , "--follow", "-p", "--no-color", "--", s]
+
 -- Here we parse the output of
--- git log --pretty=format:"#%n%h" --follow -p --no-color -- <file.hs>
+-- git log --pretty=format:"%h" --follow -p --no-color -- <file.hs>
 
 data GitChange
   = GitChange { _lineSrc   :: Int
@@ -68,6 +68,10 @@ restEOfLine = many (noneOf "\r\n") <* ((endOfLine >> return ()) <|> eof)
 skipLine :: P ()
 skipLine = restOfLine >> return ()
 
+skipLineN :: Int -> P ()
+skipLineN 0 = return ()
+skipLineN n = skipLine >> skipLineN (n-1)
+
 -- | Skip whitespaces before parsing p
 lexeme :: P a -> P a
 lexeme p = spaces >> p
@@ -77,26 +81,32 @@ parseUnifiedDiff :: P UnifiedDiff
 parseUnifiedDiff
   = (string "@@"
   *> (UD <$> lexeme (char '-' >> parseInt)
-         <*> (char ',' >> parseInt)
+         <*> (option 0 (try (char ',' >> parseInt))) 
          <*> lexeme (char '+' >> parseInt)
-         <*> (char ',' >> parseInt)) 
+         <*> (option 0 (try (char ',' >> parseInt)))) 
   <* lexeme (string "@@")) <?> "Unified Diff Info"
   
--- |This is now specific for us:
-parseGitLogEntry :: P GitLogEntry
-parseGitLogEntry = char '#' >> endOfLine >>
-    (GitLogEntry <$> ((pHash  <?> "Commit hash") <* skipLine <* skipLine)
-                 <*> (pSrcFile <?> "Source File Info")
-                 <*> (pDstFile <?> "Dest File Info")
-                 <*> parseGitChanges) <?> "Commit Information"
+-- | Parses an entry from 'git log --pretty=format:"%h"'. Note that the '#' char
+--   is pretty important as it makes it trivial to know when the entry starts.
+parseGitLogEntry :: P (Maybe GitLogEntry)
+parseGitLogEntry = -- parseEntryDelimiter
+  (Just <$> try ((GitLogEntry
+       <$> ((pHash  <?> "Commit hash") <* skipLineN 2)
+       <*> (pSrcFile <?> "Source File Info")
+       <*> (pDstFile <?> "Dest File Info")
+       <*> parseGitChanges) <?> "Commit Information"))
+  <|> ((pHash  <?> "Commit hash") >> skipLineN 4 >> return Nothing)
   where
     pHash    = many hexDigit <* endOfLine
     pSrcFile = string "---" >> lexeme (string "a/" >> restOfLine)
     pDstFile = string "+++" >> lexeme (string "b/" >> restOfLine)
 
+-- | Parse all change sets of the same commit entry.
 parseGitChanges :: P [GitChange]
 parseGitChanges = (concat <$> many parseGitChange1)
 
+-- | Parse one change set. A change set is identified by
+--   a line starting in a unified diff location.
 parseGitChange1 :: P [GitChange]
 parseGitChange1
   = do
@@ -110,7 +120,7 @@ parseGitChange1
       =   ((char ' ' >> skipLine >> pChanges (src + 1 , dst + 1))
       <|> (pBlock >>= \(ins , del) -> ((GitChange src dst ins del) :)
                                   <$> pChanges (src + length del , dst + length ins))
-      <|> (return [])) <?> "here"
+      <|> (return [])) <?> "Change set"
 
     pBlock = (pPlusBlock <|> pMinusBlock) <?> "Change Block"
 
@@ -128,8 +138,9 @@ parseGitChange1
         plus  <- many  (char '+' >> restEOfLine)
         return (plus , minus)
 
+-- | Parses the full log.
 parseGitLog :: P [GitLogEntry]
-parseGitLog = many parseGitLogEntry
+parseGitLog = foldr (maybe id (:)) [] <$> many (lexeme parseGitLogEntry)
 
 -- | Parse 'git log' result. First parameter is the description
 --   of the log.
@@ -137,6 +148,7 @@ parseGitLogEntries :: String -> String -> Either ParseError [GitLogEntry]
 parseGitLogEntries desc c = runParser parseGitLog () desc c
          
 
+-- XXX: Make something better out of this.
 pretty :: [GitLogEntry] -> IO ()
 pretty = mapM_ pretty1
   where
@@ -160,3 +172,4 @@ test s = do c <- readFile s
             case parseGitLogEntries "" c of
               Left err -> putStrLn (show err)
               Right c  -> pretty c
+
