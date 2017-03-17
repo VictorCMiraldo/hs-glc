@@ -21,11 +21,6 @@ instance Show UnifiedDiff where
               , "@@"
               ]
 
--- | given a filename, generate the list of options
---   we need to pass to 'git log' to obtain a parseable output.
-gitLogOptionsForFile :: String -> [String]
-gitLogOptionsForFile s = ["--pretty=format:%h" , "--follow", "-p", "--no-color", "--", s]
-
 -- Here we parse the output of
 -- git log --pretty=format:"%h" --follow -p --no-color -- <file.hs>
 
