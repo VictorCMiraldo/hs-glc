@@ -148,17 +148,23 @@ data InfoAST = InfoAST
   } deriving Show
 
 -- TODO: find a better way to handle these results.
+pad :: Int -> String -> String
+pad n s = take n (s ++ repeat ' ')
+
+noData :: Int -> String
+noData = flip pad (replicate 3 '-')
+
 formatResult :: Result -> [String]
 formatResult (Result ast tok isMLI)
   = [ if isMLI then "1" else "0" ]
   ++ formatAST ast
-  ++ maybe ["-" , "-"] (\(a , b) -> [show a ,  showFloat b]) tok
+  ++ maybe [noData 5 , noData 5] (\(a , b) -> [pad 5 $ show a ,  pad 5 $ showFloat b]) tok
 
 formatAST :: InfoAST -> [String]
 formatAST (InfoAST cN dI cn (li , lo))
-  = [ show cN , showFloat dI ]
-  ++ maybe ["-" , "-"] (\(a , b) -> [a , b]) cn
-  ++ [ show li , show lo ]
+  = [ pad 5 $ show cN , pad 5 $ showFloat dI ]
+  ++ maybe [noData 10, noData 10] (\(a , b) -> [pad 10 a , pad 10 b]) cn
+  ++ [ pad 5 $ show li , pad 5 $ show lo ]
 
 -- * Producing the results:
 
