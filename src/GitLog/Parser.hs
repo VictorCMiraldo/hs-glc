@@ -1,4 +1,7 @@
-module GitLog where
+module GitLog.Parser where
+
+import Text.Parsec
+import Text.Parsec.Char
 
 import Control.Arrow((***))
 import Data.Char(isDigit)
@@ -6,52 +9,22 @@ import Data.List(break, groupBy)
 
 import Control.Monad.State
 
--- * Library functions
+data UnifiedDiff = UD
+  { _srcLine :: Int
+  , _srcSpan :: Int
+  , _dstLine :: Int
+  , _dstSpan :: Int
+  }
 
-takeDropWhile :: (a -> Bool) -> [a] -> ([a] , [a])
-takeDropWhile p [] = ([] , [])
-takeDropWhile p (x:xs)
-  | not (p x) = ([] , x:xs)
-  | otherwise = let (a , b) = takeDropWhile p xs
-                 in (x:a , b)
-
-extract :: String -> String -> Maybe String
-extract _ []  = Just []
-extract [] ss = Just ss 
-extract (x:xs) (s:ss)
-  | x == s    = extract xs ss
-  | otherwise = Nothing
-
-dropSuffix :: String -> String -> Maybe String
-dropSuffix _ []     = Nothing
-dropSuffix s (x:xs) = maybe ((x:) <$> dropSuffix s xs) (const (Just []))
-                            (extract s (x:xs))
-
-between :: String -> String -> Maybe String
-between s ss = extract s ss >>= dropSuffix s
-
-readNumbers :: String -> [Int]
-readNumbers [] = []
-readNumbers s  = (uncurry (:)) . (read *** (readNumbers . dropNN)) . nums $ s
-  where
-    dropNN = dropWhile (not . isDigit)
-
-    nums :: String -> (String , String)
-    nums = takeDropWhile isDigit . dropNN
-
--- Reads the start line from both original file and changed file
--- for instance;
---
---  readLineInfo "@@ +142,23 -150,26 @@ some more text"
---     == (142,150)
---
--- WARNING: pretty fragile!
-readLineInfo :: String -> (Int , Int)
-readLineInfo s = case readNumbers <$> between "@@" s of
-                   Just [l1i , l1s , l2i , l2s] -> (l1i , l2i)
-                   Just [l1i , l1s , l2i] -> (l1i , l2i)
-                   Just [l1i , l2i] -> (l1i , l2i)
-                   x -> error ("lol" ++ show x ++ "\n" ++ show s)
+-- | Shows it nicely already!
+--   @@ -16,7 +16,8 @@
+instance Show UnifiedDiff where
+  show (UD sl ss dl ds)
+    = unwords ["@@"
+              , concat [ "-" , show sl , "," , show ss ]
+              , concat [ "+" , show dl , "," , show ds ]
+              , "@@"
+              ]
 
 -- Here we parse the output of
 -- git log --pretty=format:"#%n%h" --follow -p --no-color -- <file.hs>
@@ -64,104 +37,111 @@ data GitChange
               }
     deriving Show
 
-data GitLogChg
-  = GitLogChg { _commit   :: String
+data GitLogEntry
+  = GitLogEntry { _commit   :: String
               , _fin      :: String
               , _fout     :: String
               , _changes  :: [GitChange]
               }
     deriving Show
 
--- A GitChange is really a change when there are insertions and
--- deletions.
-isChange :: GitChange -> Bool
-isChange (GitChange _ _ (_:_) (_:_)) = True
-isChange _                           = False
+-- | Our parser runs over strings, we keep no user-state.
+type P = Parsec String ()
 
--- Parse the log as a single string.
-parseLog :: String -> [GitLogChg]
-parseLog = parseLines . lines
+-- |Parses an Int number
+parseInt :: P Int
+parseInt = read <$> many1 digit
 
--- Parse individual lines. We made sure a patch starts with a '#'
-parseLines :: [String] -> [GitLogChg]
-parseLines ("#":lines) = let (this , rest) = break (== "#") lines
-                             rec = parseLines rest
-                          in parseChangeSet this : parseLines rest
-parseLines _ = []                             
+-- | Runs p on the lines of our input.
+parseLines :: P a -> P [a]
+parseLines p = p `sepEndBy1` endOfLine
 
--- Parse a single change set
-parseChangeSet :: [String] -> GitLogChg
-parseChangeSet (hash:_:_:fin:fout:juice)
-  = GitLogChg hash (parseFile fin) (parseFile fout) (parseChanges juice)
+-- | Gets the rest of line, consumes endOfLine
+restOfLine :: P String
+restOfLine = many (noneOf "\r\n") <* endOfLine
+
+-- | Gets the rest of line, consumes endOfLine or eof
+restEOfLine :: P String
+restEOfLine = many (noneOf "\r\n") <* ((endOfLine >> return ()) <|> eof)
+
+-- | Skip a line
+skipLine :: P ()
+skipLine = restOfLine >> return ()
+
+-- | Skip whitespaces before parsing p
+lexeme :: P a -> P a
+lexeme p = spaces >> p
+
+-- | Parses a unified diff '@@ -16,7 +16,8 @@'
+parseUnifiedDiff :: P UnifiedDiff
+parseUnifiedDiff
+  = (string "@@"
+  *> (UD <$> lexeme (char '-' >> parseInt)
+         <*> (char ',' >> parseInt)
+         <*> lexeme (char '+' >> parseInt)
+         <*> (char ',' >> parseInt)) 
+  <* lexeme (string "@@")) <?> "Unified Diff Info"
+  
+-- |This is now specific for us:
+parseGitLogEntry :: P GitLogEntry
+parseGitLogEntry = char '#' >> endOfLine >>
+    (GitLogEntry <$> ((pHash  <?> "Commit hash") <* skipLine <* skipLine)
+                 <*> (pSrcFile <?> "Source File Info")
+                 <*> (pDstFile <?> "Dest File Info")
+                 <*> parseGitChanges) <?> "Commit Information"
   where
-    parseFile = drop 6
-parse1 _ = []
+    pHash    = many hexDigit <* endOfLine
+    pSrcFile = string "---" >> lexeme (string "a/" >> restOfLine)
+    pDstFile = string "+++" >> lexeme (string "b/" >> restOfLine)
 
-isIns :: String -> Bool
-isIns ('+':_) = True
-isIns _       = False
+parseGitChanges :: P [GitChange]
+parseGitChanges = (concat <$> many parseGitChange1)
 
-isDel :: String -> Bool
-isDel ('-':_) = True
-isDel _       = False
-
-isChg :: String -> Bool
-isChg ('@':'@':_) = True
-isChg _           = False
-
-
--- Parses individual changes. Returns only blocks of change that has
--- a sequence of insertions followed by a sequence of deletions;
--- that is, a modify.
-parseChanges :: [String] -> [GitChange]
-parseChanges []         = []
-parseChanges (cInfo:xs)
-  | isChg cInfo
-    = let (this , rest) = break isChg xs
-          li            = readLineInfo cInfo
-          -- li'           = hasLineIn li cInfo
-       in getChanges li this ++ parseChanges rest
-  | otherwise = parseChanges xs
+parseGitChange1 :: P [GitChange]
+parseGitChange1
+  = do
+    ud    <- parseUnifiedDiff <* restOfLine
+    pChanges (_srcLine ud, _dstLine ud)
   where
-    hasLineIn :: (Int , Int) -> String -> (Int , Int)
-    hasLineIn (ls , ld) ('@':'@':s)
-      = case dropWhile (/= '@') s of
-            ('@':'@':x:xs) -> (ls + 1 , ld + 1)
-            _            -> (ls , ld)
+    -- Now we keep a counter of lines
+    -- and return all the changes we see
+    pChanges :: (Int , Int) -> P [GitChange]
+    pChanges (src , dst)
+      =   ((char ' ' >> skipLine >> pChanges (src + 1 , dst + 1))
+      <|> (pBlock >>= \(ins , del) -> ((GitChange (src + 1) (dst + 1) ins del) :)
+                                  <$> pChanges (src + length del , dst + length ins))
+      <|> (return [])) <?> "here"
 
-   
+    pBlock = (pPlusBlock <|> pMinusBlock) <?> "Change Block"
 
-    isCopy :: [String] -> Bool
-    isCopy [] = True
-    isCopy (x:_) = x == [] || head x == ' '
+    pPlusBlock :: P ([String] , [String])
+    pPlusBlock
+      = do
+        plus  <- many1 (char '+' >> restEOfLine)
+        minus <- many  (char '-' >> restEOfLine)
+        return (plus , minus)
 
-    isInsDel :: String -> Bool
-    isInsDel x = isIns x || isDel x
+    pMinusBlock :: P ([String] , [String])
+    pMinusBlock
+      = do
+        minus <- many1 (char '-' >> restEOfLine)
+        plus  <- many  (char '+' >> restEOfLine)
+        return (plus , minus)
 
-    -- The groupBy will separate lines that are copied from lines
-    -- that are inserted/deleted.
-    getChanges :: (Int , Int) -> [String] -> [GitChange]
-    getChanges li = getGroupedChanges li
-                  . groupBy (\a b -> isInsDel a && isInsDel b)
+parseGitLog :: P [GitLogEntry]
+parseGitLog = many parseGitLogEntry
 
-    getGroupedChanges :: (Int , Int) -> [[String]] -> [GitChange]
-    getGroupedChanges (ls , ld) [] = []
-    getGroupedChanges (ls , ld) (s:ss)
-      -- If "s" is a copied line, step both counters
-      | isCopy s = getGroupedChanges (ls + 1 , ld + 1) ss
-      -- Otherwise, "s" is a list of insertions and deletions.
-      | otherwise
-      = let insS = map tail $ filter isIns s
-            delS = map tail $ filter isDel s
-         in (GitChange ls ld insS delS)
-            : getGroupedChanges (ls + length delS , ld + length insS) ss
+-- | Parse 'git log' result. First parameter is the description
+--   of the log.
+parseGitLogEntries :: String -> String -> Either ParseError [GitLogEntry]
+parseGitLogEntries desc c = runParser parseGitLog () desc c
+         
 
-
-pretty :: [GitLogChg] -> IO ()
+pretty :: [GitLogEntry] -> IO ()
 pretty = mapM_ pretty1
   where
-    pretty1 :: GitLogChg -> IO ()
-    pretty1 (GitLogChg hash fin fout chgs)
+    pretty1 :: GitLogEntry -> IO ()
+    pretty1 (GitLogEntry hash fin fout chgs)
       =  putStrLn "#######"
       >> putStrLn hash
       >> putStrLn ("--- a/" ++ fin)
@@ -175,7 +155,8 @@ pretty = mapM_ pretty1
       >> mapM_ (putStrLn . ('-':)) delS
 
 
-test :: FilePath -> IO [GitLogChg]
-test s = do r <- readFile s
-            return (parseLog r)
-
+test :: FilePath -> IO ()
+test s = do c <- readFile s
+            case parseGitLogEntries "" c of
+              Left err -> putStrLn (show err)
+              Right c  -> pretty c
