@@ -177,7 +177,7 @@ formatResult (Result ast tok isMLI)
 formatAST :: InfoAST -> [String]
 formatAST (InfoAST cN dI con depth (li , lo))
   =  [ pad 5 $ show li , pad 5 $ show lo ]
-  ++ [" | "]
+  ++ ["| "]
   ++ [ pad 5 $ show cN , pad 5 $ showFloat dI ]
   ++ [pad 14 con , pad 3 $ show depth]
   
@@ -225,3 +225,4 @@ getASTInfo (modPre , modPos) (GitChange lSrc lDst ins del)
     getCol [] [] = Nothing
     getCol (x:_) (y:_)
       = Just $ length (takeWhile (uncurry (==)) (zip x y))
+    getCol _ _ = Nothing
