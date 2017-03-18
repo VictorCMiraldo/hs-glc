@@ -26,6 +26,10 @@ takeDropWhile p (x:xs)
             in (x:yp , np)
   | otherwise = ([] , x:xs)
 
+stail :: [a] -> [a]
+stail []     = []
+stail (_:xs) = xs
+
 -- Crawler monad; encapsulates program options and
 -- custom exceptions on top of the IO monad.
 type CrawlerM = ReaderT Opts ErrIO
@@ -202,8 +206,8 @@ getASTInfo (modPre , modPos) (GitChange lSrc lDst ins del)
 
     -- Get the stack of constructors from modPre and modPos,
     -- then compute the necessary shenanigans
-    let preCons    = tail $ conStackIn ls modPre
-    let posCons    = tail $ conStackIn ls modPos
+    let preCons    = stail $ conStackIn ls modPre
+    let posCons    = stail $ conStackIn ls modPos
     let (dif , eq) = takeDropWhile (uncurry (/=)) $ zip preCons posCons
     let depth      = length dif + 1 -- account for the 'tail's above
     let parent     = case eq of [] -> "---"; (x:_) -> fst x
