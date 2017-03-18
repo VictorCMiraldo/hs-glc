@@ -14,7 +14,7 @@ module HsInfo.ASTInfo
   , hsParseModule , hsTokenize
   , LineRegion(..)
   , TyCon(..)
-  , tyconString
+  , tyconString , isCon
   , Choice
   , stackIn , conStackIn , typeStackIn
   , firstTypeIn , firstConIn , allInfoIn
@@ -311,25 +311,31 @@ c = let Right r = hsParseModule
 
 -- | stackIn returns the FIRST stack of TyCon's found within a LineRegion.
 --
---   stackIn (LineRegion (LR 5 (Just 8) 5)) c
---      == Just [ConName "TyFun",TyName "Type",ConName "TypeSig"
---              ,TyName "Decl",ConName "Module",TyName "Module"]
+--   stackIn (LR 5 (Just 8) 5) c
+--      == [("cTyFun","tType"),("cTypeSig","tDecl"),("cModule","tModule")]
 --
---  Note that it will be same as @stackIn (LineRegion (LR 5 (Just 8) 431)) c@ 
-stackIn :: LineRegion -> HsModule -> Maybe [TyCon]
-stackIn = astInfo stackInCHOICE
+--  Note that it will be same as @stackIn (LR 5 (Just 8) 431) c@ 
+stackIn :: LineRegion -> HsModule -> [(String , String)]
+stackIn lr c = maybe [] untangle (astInfo stackInCHOICE lr c)
   where
+    untangle :: [TyCon] -> [(String , String)]
+    untangle []                 = []
+    untangle (c@(ConName _):t@(TyName _):xs)
+      = (tyconString c , tyconString t) : untangle xs
+    untangle (c@(ConName x):xs) = (tyconString c , "") : untangle xs
+    untangle (c@(TyName x):xs)  = ("" , tyconString c) : untangle xs
+    
     stackInCHOICE :: (Alternative m) => Choice m [TyCon]
     stackInCHOICE [] = empty
     stackInCHOICE xs = pure xs
 
 -- | Returns only the constructors from stackIn
-conStackIn :: LineRegion -> HsModule -> Maybe [String]
-conStackIn lr c = (map tyconString . filter isCon) <$> stackIn lr c
+conStackIn :: LineRegion -> HsModule -> [String]
+conStackIn lr c = map fst $ stackIn lr c
 
 -- | Returns only the types from stackIn
-typeStackIn :: LineRegion -> HsModule -> Maybe [String]
-typeStackIn lr c = (map tyconString . filter (not . isCon)) <$> stackIn lr c
+typeStackIn :: LineRegion -> HsModule -> [String]
+typeStackIn lr c = map snd $ stackIn lr c
 
 -- | Returns the name of the first type found in the region.
 firstTypeIn :: LineRegion -> HsModule -> Maybe String

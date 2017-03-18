@@ -16,29 +16,33 @@ data Opts
     , optHeader       :: Bool
     , optColBased     :: Bool
     , optKeepNoChg    :: Bool
+    , optGetChgdCon   :: Bool
     } deriving Show
 
 defaultOpts :: String -> Opts
-defaultOpts n = Opts Myers False n False False False
+defaultOpts n = Opts Myers False n False True False False
 
 options :: [OptDescr (Opts -> Opts)]
 options =
-  [ Option ['d'] ["diff-algo"]
+  [ Option ['d'] ["diff-algorithm"]
       (ReqArg (\f opts -> opts { optDiffAlgo = maybe Myers id (readDiffAlgo f)})
-      "patience|histogram")
-      "\nChoose the diff algorithm to use with 'diff log'\n"
+      "")
+      "\nChoose the diff algorithm to use with 'diff log'.\nAny option that can be passed to git's '--diff-algorithm' work.\n"
   , Option ['v']     ["verbose"]
         (NoArg (\ opts -> opts { optVerb = True }))
-        "\nRuns verbose\n"
+        "\nRuns verbose.\n"
   , Option ['h']     ["header"]
         (NoArg (\ opts -> opts { optHeader = True }))
-        "\nShows the header of the columns\n"
-  , Option []     ["use-columns"]
-        (NoArg (\ opts -> opts { optColBased = True }))
-        "\nUse columns to refine constructor analisys\n"
+        "\nShows the header of the columns.\n"
+  , Option []     ["dont-use-columns"]
+        (NoArg (\ opts -> opts { optColBased = False }))
+        "\nDo not use columns to refine constructor analisys.\n"
   , Option ['k']     ["keep-no-change"]
         (NoArg (\ opts -> opts { optKeepNoChg = True }))
-        "\nKeeps the edits with only insertions or deletions in the data\n"
+        "\nKeeps the edits with only insertions or deletions in the data.\n"
+  , Option ['c']     ["changed-constructor"]
+        (NoArg (\ opts -> opts { optGetChgdCon = True }))
+        "\nShows the constructors that changed, intead of only\nthe first common parent.\n"
   ]
 
 compileOpts :: [String] -> IO Opts

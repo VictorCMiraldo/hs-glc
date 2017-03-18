@@ -19,6 +19,13 @@ import Crawler.DiffIdx
 showFloat :: Float -> String
 showFloat = printf "%.3f"
 
+takeDropWhile :: (a -> Bool) -> [a] -> ([a] , [a])
+takeDropWhile p [] = ([] , [])
+takeDropWhile p (x:xs)
+  | p x =  let (yp , np) = takeDropWhile p xs
+            in (x:yp , np)
+  | otherwise = ([] , x:xs)
+
 -- Crawler monad; encapsulates program options and
 -- custom exceptions on top of the IO monad.
 type CrawlerM = ReaderT Opts ErrIO
@@ -70,6 +77,8 @@ crawl
   = do
     -- XXX: implement
     whenOpt optHeader (throwError NotImplemented)
+
+    whenVerb "Running with -v"
 
     -- Crawling the log is trivial now;
     -- First we parse the log,
@@ -141,10 +150,11 @@ data Result  = Result
   } deriving Show
 
 data InfoAST = InfoAST
-  { _astClusterN  :: ClusterN
-  , _astDiffIdx   :: DiffIdx
-  , _astConChange :: Maybe (String , String)
-  , _astLineRange :: (Int , Int)
+  { _astClusterN     :: ClusterN
+  , _astDiffIdx      :: DiffIdx
+  , _astChgParent    :: String
+  , _astParendDepth  :: Int
+  , _astLineRange    :: (Int , Int)
   } deriving Show
 
 -- TODO: find a better way to handle these results.
@@ -161,9 +171,9 @@ formatResult (Result ast tok isMLI)
   ++ maybe [noData 5 , noData 5] (\(a , b) -> [pad 5 $ show a ,  pad 5 $ showFloat b]) tok
 
 formatAST :: InfoAST -> [String]
-formatAST (InfoAST cN dI cn (li , lo))
-  = [ pad 5 $ show cN , pad 5 $ showFloat dI ]
-  ++ maybe [noData 10, noData 10] (\(a , b) -> [pad 10 a , pad 10 b]) cn
+formatAST (InfoAST cN dI con depth (li , lo))
+  =  [ pad 5 $ show cN , pad 5 $ showFloat dI ]
+  ++ [pad 14 con , pad 3 $ show depth]
   ++ [ pad 5 $ show li , pad 5 $ show lo ]
 
 -- * Producing the results:
@@ -185,21 +195,27 @@ getASTInfo (modPre , modPos) (GitChange lSrc lDst ins del)
   = do
     -- Are we using columns to fine-tune the ast?
     useCols <- getOpt optColBased
-    let col = if useCols then getCol ins del else Nothing
+    
+    -- Are we showing the actual constructors that changed?
+    keepChg <- getOpt optGetChgdCon
 
-    -- Make the line-range we need.
+    -- Make our line range
+    let col = if useCols then getCol ins del else Nothing
     let ls  = LR lSrc col lDst
 
-    -- Get the parent of the constructor that changed
-    -- in both the source and the destination.
-    let conInfo = (,) <$> firstConParentOf ls modPre
-                      <*> firstConParentOf ls modPos
+    -- Get the stack of constructors from modPre and modPos,
+    -- then compute the necessary shenanigans
+    let preCons    = tail $ conStackIn ls modPre
+    let posCons    = tail $ conStackIn ls modPos
+    let (dif , eq) = takeDropWhile (uncurry (/=)) $ zip preCons posCons
+    let depth      = length dif + 1 -- account for the 'tail's above
+    let parent     = case eq of [] -> "---"; (x:_) -> fst x
 
     -- Get the constructors of the regions of the AST
     let cPre = allConsIn ls modPre
     let cPos = allConsIn ls modPos
     let (cl , didx) = getDiffIdx cPre cPos
-    return $ InfoAST cl didx conInfo (lSrc , lDst)
+    return $ InfoAST cl didx parent depth (lSrc , lDst)
   where
 
     -- gets the first column in which things differ.
