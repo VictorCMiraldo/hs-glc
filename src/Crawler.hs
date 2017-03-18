@@ -26,6 +26,19 @@ takeDropWhile p (x:xs)
             in (x:yp , np)
   | otherwise = ([] , x:xs)
 
+-- | Splits two lists into a common prefix and
+--   the rest of both.
+--
+--   @prefixSplit xs ys = (eq , xs' , ys')@
+--   iff
+--   @xs == eq ++ xs'@ and @ys == eq ++ ys'@
+prefixSplit :: (Eq a) => [a] -> [a] -> ([a] , [a] , [a])
+prefixSplit (x:xs) (y:ys)
+  | x == y     = let (eq , xs' , ys') = prefixSplit xs ys
+                  in (x:eq , xs' , ys')
+  | otherwise  = ([] , x:xs , y:ys)
+prefixSplit xs ys = ([] , xs , ys)
+
 stail :: [a] -> [a]
 stail []     = []
 stail (_:xs) = xs
@@ -157,7 +170,8 @@ data InfoAST = InfoAST
   { _astClusterN     :: ClusterN
   , _astDiffIdx      :: DiffIdx
   , _astChgParent    :: String
-  , _astParendDepth  :: Int
+  , _astParendDepthI :: Int
+  , _astParendDepthO :: Int
   , _astLineRange    :: (Int , Int)
   } deriving Show
 
@@ -176,11 +190,11 @@ formatResult (Result ast tok isMLI)
   ++ maybe [noData 5 , noData 5] (\(a , b) -> [pad 5 $ show a ,  pad 5 $ showFloat b]) tok
 
 formatAST :: InfoAST -> [String]
-formatAST (InfoAST cN dI con depth (li , lo))
+formatAST (InfoAST cN dI con depthI depthO (li , lo))
   =  [ pad 5 $ show li , pad 5 $ show lo ]
   ++ ["| "]
   ++ [ pad 5 $ show cN , pad 5 $ showFloat dI ]
-  ++ [pad 14 con , pad 3 $ show depth]
+  ++ [pad 14 con , pad 3 $ show depthI , pad 3 $ show depthO]
   
 
 -- * Producing the results:
@@ -209,17 +223,21 @@ getASTInfo (modPre , modPos) (GitChange lSrc lDst ins del)
 
     -- Get the stack of constructors from modPre and modPos,
     -- then compute the necessary shenanigans
-    let preCons    = stail $ conStackIn ls modPre
-    let posCons    = stail $ conStackIn ls modPos
-    let (dif , eq) = takeDropWhile (uncurry (/=)) $ zip preCons posCons
-    let depth      = length dif + 1 -- account for the 'tail's above
-    let parent     = case eq of [] -> "---"; (x:_) -> fst x
+    let preCons    = conStackIn ls modPre
+    let posCons    = conStackIn ls modPos
+    -- to get the first constructor that agrees, we will
+    -- take the common prefix of the reversed stacks
+    -- and reverse it again.
+    let (eq , pr , ps) = prefixSplit (reverse preCons) (reverse posCons)
+    let depthI     = length pr
+    let depthO     = length ps
+    let parent     = case (reverse eq) of [] -> "---"; (x:_) -> x
 
     -- Get the constructors of the regions of the AST
     let cPre = allConsIn ls modPre
     let cPos = allConsIn ls modPos
     let (cl , didx) = getDiffIdx cPre cPos
-    return $ InfoAST cl didx parent depth (lSrc , lDst)
+    return $ InfoAST cl didx parent depthI depthO (lSrc , lDst)
   where
 
     -- gets the first column in which things differ.
