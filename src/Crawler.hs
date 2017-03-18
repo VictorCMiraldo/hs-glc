@@ -243,5 +243,8 @@ getASTInfo (modPre , modPos) (GitChange lSrc lDst ins del)
     -- gets the first column in which things differ.
     getCol [] [] = Nothing
     getCol (x:_) (y:_)
-      = Just $ length (takeWhile (uncurry (==)) (zip x y))
+      = let (eq , x' , y') = prefixSplit x y
+         in if x' == [] || y' == []
+            then Nothing
+            else Just $ length eq
     getCol _ _ = Nothing
