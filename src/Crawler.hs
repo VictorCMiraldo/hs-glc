@@ -172,6 +172,7 @@ formatResult :: Result -> [String]
 formatResult (Result ast tok isMLI)
   = [ if isMLI then "1" else "0" ]
   ++ formatAST ast
+  ++ ["| "]
   ++ maybe [noData 5 , noData 5] (\(a , b) -> [pad 5 $ show a ,  pad 5 $ showFloat b]) tok
 
 formatAST :: InfoAST -> [String]
