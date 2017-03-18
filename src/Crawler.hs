@@ -231,7 +231,10 @@ getASTInfo (modPre , modPos) (GitChange lSrc lDst ins del)
     let (eq , pr , ps) = prefixSplit (reverse preCons) (reverse posCons)
     let depthI     = length pr
     let depthO     = length ps
-    let parent     = case (reverse eq) of (_:x:_) -> x; _ -> "---"
+    let parent     = case (reverse eq) of
+                             (_:x:_) -> x
+                             [x]     -> x
+                             _       -> "---"
 
     -- Get the constructors of the regions of the AST
     let cPre = allConsIn ls modPre
