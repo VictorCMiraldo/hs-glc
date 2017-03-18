@@ -127,7 +127,7 @@ processEntry (GitLogEntry hash fin fout chg)
     processAll mod = mapM (processChange mod) chg
 
     isMLI :: GitChange -> Bool
-    isMLI c = length (_ins c) == length (_del c)
+    isMLI c = length (_ins c) /= length (_del c)
 
     -- Something that only inserts or deletes is not a change!
     isNotChange :: GitChange -> Bool
@@ -176,9 +176,11 @@ formatResult (Result ast tok isMLI)
 
 formatAST :: InfoAST -> [String]
 formatAST (InfoAST cN dI con depth (li , lo))
-  =  [ pad 5 $ show cN , pad 5 $ showFloat dI ]
+  =  [ pad 5 $ show li , pad 5 $ show lo ]
+  ++ [" | "]
+  ++ [ pad 5 $ show cN , pad 5 $ showFloat dI ]
   ++ [pad 14 con , pad 3 $ show depth]
-  ++ [ pad 5 $ show li , pad 5 $ show lo ]
+  
 
 -- * Producing the results:
 
