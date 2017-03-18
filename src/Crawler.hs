@@ -225,6 +225,7 @@ getASTInfo (modPre , modPos) (GitChange lSrc lDst ins del)
     -- then compute the necessary shenanigans
     let preCons    = conStackIn ls modPre
     let posCons    = conStackIn ls modPos
+    
     -- to get the first constructor that agrees, we will
     -- take the common prefix of the reversed stacks
     -- and reverse it again.
@@ -233,8 +234,12 @@ getASTInfo (modPre , modPos) (GitChange lSrc lDst ins del)
     let depthO     = length ps
     let parent     = case (reverse eq) of
                              (_:x:_) -> x
-                             [x]     -> x
                              _       -> "---"
+
+    if parent == "---"
+    then whenVerb ("\t" ++ show lSrc ++ ":" ++ show preCons)
+      >> whenVerb ("\t" ++ show lDst ++ ":" ++ show posCons)
+    else return ()
 
     -- Get the constructors of the regions of the AST
     let cPre = allConsIn ls modPre
@@ -247,7 +252,15 @@ getASTInfo (modPre , modPos) (GitChange lSrc lDst ins del)
     getCol [] [] = Nothing
     getCol (x:_) (y:_)
       = let (eq , x' , y') = prefixSplit x y
-         in if x' == [] || y' == []
+         in if length x' <= 3 || length y' <= 3 
             then Nothing
             else Just $ length eq
     getCol _ _ = Nothing
+{-
+DEBUG:
+
+  Why can't we figure out these constructors?
+
+"./src/Crawler.hs" 6b855b3 0 183   197   |  31    0.473 ---            7   1   |  2     0.267
+"./src/Crawler.hs" 6b855b3 1 212   226   |  14    0.534 ---            9   4   |  14    0.322
+-}
