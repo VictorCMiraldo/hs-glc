@@ -16,11 +16,10 @@ data Opts
     , optHeader       :: Bool
     , optColBased     :: Bool
     , optKeepNoChg    :: Bool
-    , optGetChgdCon   :: Bool
     } deriving Show
 
 defaultOpts :: String -> Opts
-defaultOpts n = Opts Myers False n False True False False
+defaultOpts n = Opts Myers False n False True False
 
 options :: [OptDescr (Opts -> Opts)]
 options =
@@ -40,9 +39,11 @@ options =
   , Option ['k']     ["keep-no-change"]
         (NoArg (\ opts -> opts { optKeepNoChg = True }))
         "\nKeeps the edits with only insertions or deletions in the data.\n"
+{-
   , Option ['c']     ["changed-constructor"]
         (NoArg (\ opts -> opts { optGetChgdCon = True }))
         "\nShows the constructors that changed, intead of only\nthe first common parent.\n"
+-}
   ]
 
 compileOpts :: [String] -> IO Opts

@@ -195,9 +195,6 @@ getASTInfo (modPre , modPos) (GitChange lSrc lDst ins del)
   = do
     -- Are we using columns to fine-tune the ast?
     useCols <- getOpt optColBased
-    
-    -- Are we showing the actual constructors that changed?
-    keepChg <- getOpt optGetChgdCon
 
     -- Make our line range
     let col = if useCols then getCol ins del else Nothing
