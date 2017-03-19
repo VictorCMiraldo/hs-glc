@@ -143,9 +143,12 @@ processEntry (GitLogEntry hash fin fout chg)
       = do
         keepNoChg <- getOpt optKeepNoChg
         ast       <- getASTInfo ms chg
-        if not keepNoChg && isNotChange chg 
+        if (not keepNoChg && isNotChange chg) || invalid ast 
         then return Nothing
         else Just <$> (Result ast <$> getTokenDiffIdx chg <*> return (isMLI chg))
+
+    invalid :: InfoAST -> Bool
+    invalid i = isNaN (_astDiffIdx i)
         
 -- * Producing the results:
 
