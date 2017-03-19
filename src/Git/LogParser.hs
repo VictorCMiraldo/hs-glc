@@ -47,6 +47,11 @@ type P = Parsec String ()
 parseInt :: P Int
 parseInt = read <$> many1 digit
 
+-- |Parses a float
+parseFloat :: P Float
+parseFloat = read <$> ((++) <$> many1 digit
+                            <*> ((:) <$> char '.' <*> many1 digit)) 
+
 -- | Runs p on the lines of our input.
 parseLines :: P a -> P [a]
 parseLines p = p `sepEndBy1` endOfLine
@@ -142,7 +147,7 @@ parseGitLog = foldr (maybe id (:)) [] <$> many (lexeme parseGitLogEntry)
 parseGitLogEntries :: String -> String -> Either ParseError [GitLogEntry]
 parseGitLogEntries desc c = runParser parseGitLog () desc c
          
-
+{-
 -- XXX: Make something better out of this.
 pretty :: [GitLogEntry] -> IO ()
 pretty = mapM_ pretty1
@@ -168,3 +173,4 @@ test s = do c <- readFile s
               Left err -> putStrLn (show err)
               Right c  -> pretty c
 
+-}

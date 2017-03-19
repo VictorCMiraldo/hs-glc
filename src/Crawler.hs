@@ -2,7 +2,6 @@ module Crawler(main) where
 
 import Control.Monad.Reader
 import Control.Monad.Except
-import Text.Printf
 import System.IO
 
 import HsInfo.ASTInfo
@@ -13,18 +12,9 @@ import Errors
 
 import Crawler.Options
 import Crawler.DiffIdx
+import Result
 
 -- * Library functions
-
-showFloat :: Float -> String
-showFloat = printf "%.3f"
-
-takeDropWhile :: (a -> Bool) -> [a] -> ([a] , [a])
-takeDropWhile p [] = ([] , [])
-takeDropWhile p (x:xs)
-  | p x =  let (yp , np) = takeDropWhile p xs
-            in (x:yp , np)
-  | otherwise = ([] , x:xs)
 
 -- | Splits two lists into a common prefix and
 --   the rest of both.
@@ -157,46 +147,6 @@ processEntry (GitLogEntry hash fin fout chg)
         then return Nothing
         else Just <$> (Result ast <$> getTokenDiffIdx chg <*> return (isMLI chg))
         
--- * For every log entry we will produce a bunch of results,
---   each individual result consists in:
-
-data Result  = Result
-  { _astInfo   :: InfoAST
-  , _tokDIdx   :: Maybe (ClusterN , DiffIdx)
-  , _isMLI     :: Bool
-  } deriving Show
-
-data InfoAST = InfoAST
-  { _astClusterN     :: ClusterN
-  , _astDiffIdx      :: DiffIdx
-  , _astChgParent    :: String
-  , _astParendDepthI :: Int
-  , _astParendDepthO :: Int
-  , _astLineRange    :: (Int , Int)
-  } deriving Show
-
--- TODO: find a better way to handle these results.
-pad :: Int -> String -> String
-pad n s = take n (s ++ repeat ' ')
-
-noData :: Int -> String
-noData = flip pad (replicate 3 '-')
-
-formatResult :: Result -> [String]
-formatResult (Result ast tok isMLI)
-  = [ if isMLI then "1" else "0" ]
-  ++ formatAST ast
-  ++ ["| "]
-  ++ maybe [noData 5 , noData 5] (\(a , b) -> [pad 5 $ show a ,  pad 5 $ showFloat b]) tok
-
-formatAST :: InfoAST -> [String]
-formatAST (InfoAST cN dI con depthI depthO (li , lo))
-  =  [ pad 5 $ show li , pad 5 $ show lo ]
-  ++ ["| "]
-  ++ [ pad 5 $ show cN , pad 5 $ showFloat dI ]
-  ++ [pad 14 con , pad 3 $ show depthI , pad 3 $ show depthO]
-  
-
 -- * Producing the results:
 
 -- |Get the results for the LCS on the token level.
@@ -217,14 +167,15 @@ getASTInfo (modPre , modPos) (GitChange lSrc lDst ins del)
     -- Are we using columns to fine-tune the ast?
     useCols <- getOpt optColBased
 
-    -- Make our line range
+    -- Make our line ranges both in the source and in the destination.
     let col = if useCols then getCol ins del else Nothing
-    let ls  = LR lSrc col lDst
+    let lsPre      = LR lSrc col (lSrc + length del - 1)
+    let lsPos      = LR lDst col (lDst + length ins - 1)
 
     -- Get the stack of constructors from modPre and modPos,
     -- then compute the necessary shenanigans
-    let preCons    = conStackIn ls modPre
-    let posCons    = conStackIn ls modPos
+    let preCons    = conStackIn lsPre modPre
+    let posCons    = conStackIn lsPos modPos
     
     -- to get the first constructor that agrees, we will
     -- take the common prefix of the reversed stacks
@@ -239,11 +190,13 @@ getASTInfo (modPre , modPos) (GitChange lSrc lDst ins del)
     if parent == "---"
     then whenVerb ("\t" ++ show lSrc ++ ":" ++ show preCons)
       >> whenVerb ("\t" ++ show lDst ++ ":" ++ show posCons)
+      >> whenVerb (" at col: " ++ show col)
+      >> seq (hFlush stdout) (return ())
     else return ()
 
     -- Get the constructors of the regions of the AST
-    let cPre = allConsIn ls modPre
-    let cPos = allConsIn ls modPos
+    let cPre = allConsIn lsPre modPre
+    let cPos = allConsIn lsPos modPos
     let (cl , didx) = getDiffIdx cPre cPos
     return $ InfoAST cl didx parent depthI depthO (lSrc , lDst)
   where
@@ -256,11 +209,26 @@ getASTInfo (modPre , modPos) (GitChange lSrc lDst ins del)
             then Nothing
             else Just $ length eq
     getCol _ _ = Nothing
+
+
 {-
-DEBUG:
+notes:
 
-  Why can't we figure out these constructors?
+  We get degenerate changess from time to time.
+  For instance, consider:
 
-"./src/Crawler.hs" 6b855b3 0 183   197   |  31    0.473 ---            7   1   |  2     0.267
-"./src/Crawler.hs" 6b855b3 1 212   226   |  14    0.534 ---            9   4   |  14    0.322
+"./src/Crawler.hs" dfc7178 1 190   202 |  0     1.000 ---   
+
+  In 'git log', we see:
+
+@@ -190,2 +202,3 @@
+-    -- Make the line-range we need.
++    -- Make our line range
++    let col = if useCols then getCol ins del else Nothing
+     let ls  = LR lSrc col lDst
+
+  In fact, the crawler is looking for the ast node that was
+  in line 190 in the source module, but there is nothing there,
+  as it was just a comment being changed.
+
 -}
