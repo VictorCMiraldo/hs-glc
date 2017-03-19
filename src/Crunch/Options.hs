@@ -11,21 +11,26 @@ data Opts
     { optMinDIdx  :: Float
     , optMaxDIdx  :: Float
     , optUseTok   :: Bool
+    , optShowGT   :: Float
     } deriving Show
 
 defaultOpts :: Opts
-defaultOpts = Opts 0.0 1.0 False
+defaultOpts = Opts 0.0 1.0 False 0.25
 
 options :: [OptDescr (Opts -> Opts)]
 options =
   [ Option ['m'] ["min-idx"]
       (ReqArg (\f opts -> opts { optMinDIdx = read f})
-      "(0 .. 1)")
-      "\nMinimum difference-index to consider\n"
+      "number")
+      "\nMinimum difference-index to consider. number is float between 0 and 1\n"
   , Option ['M'] ["max-idx"]
       (ReqArg (\f opts -> opts { optMaxDIdx = read f})
-      "(0 .. 1)")
+      "number")
       "\nMaximum difference-index to consider\n"
+  , Option ['p'] ["percentage"]
+      (ReqArg (\f opts -> opts { optShowGT = read f})
+      "number")
+      "\nShow only constructors that appear more than <number> percent.\n"
   , Option ['t']     ["token"]
         (NoArg (\ opts -> opts { optUseTok = True }))
         "\nUse Token difference index instead of AST.\n"

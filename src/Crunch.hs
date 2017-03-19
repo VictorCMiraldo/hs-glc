@@ -28,30 +28,40 @@ main args
     ctes           <- concat <$> mapM readFile files
     case parseResults ctes of
       Left err -> ioError (userError ("No parse: err"))
-      Right re -> outputData (crunchResults opts (map third re))
+      Right re -> outputData (optShowGT opts)
+                             (crunchResults opts (map third re))
   where
     third (_ , _, x) = x
 
-    divPrint :: Int -> Int -> String
-    divPrint x y
-      = printf "%.3f" ((fromIntegral x / fromIntegral y) :: Float)
+    mdiv :: Int -> Int -> Float
+    mdiv x y = (fromIntegral x / fromIntegral y)
 
-    outputData :: TmpData -> IO ()
-    outputData (TD idxT mliC tot dr m)
+    divPrint :: Int -> Int -> String
+    divPrint x y = printf "%.3f" (mdiv x y)
+
+    outputData :: Float -> TmpData -> IO ()
+    outputData prec (TD idxT mliC tot dr m)
       = do
-        putStrLn $ "I looked at " ++ show tot
+        putStrLn $ "I looked at " ++ show tot ++ " entries"
         putStrLn $ "  (dropped " ++ show dr ++
                    "; " ++ divPrint dr (dr + tot) ++ ")"
         putStrLn $ ""
         putStrLn $ "mli's are: " ++ divPrint mliC tot
+        putStrLn $ printf "avg idx is: %.3f" (idxT / fromIntegral tot)
         putStrLn $ ""
+        let noInfo = maybe 0 id (M.lookup "---" m) 
+        putStrLn $ "Could not get info for: " ++ show noInfo ++ " entries"
+        putStrLn $ "  (" ++ divPrint noInfo tot ++ ")"
+        let m'   = M.delete "---" m
+        let tot' = tot - noInfo
         putStrLn $ "Top constructors are: "
-        prettyMap (M.map (\x -> fromIntegral x / fromIntegral tot) m)
+        prettyMap prec (M.map (\x -> mdiv x tot') m')
 
-    prettyMap :: M.Map String Float -> IO ()
-    prettyMap m = let l = sortBy (flip compare `on` snd) $ M.toList m
-                      l' = filter ((>= 0.25) . snd) l
-                   in mapM_ (uncurry pretty1) l'
+    prettyMap :: Float -> M.Map String Float -> IO ()
+    prettyMap prec m
+      = let l = sortBy (flip compare `on` snd) $ M.toList m
+            l' = filter ((>= prec) . snd) l
+         in mapM_ (uncurry pretty1) l'
 
     pretty1 cons f
       = putStrLn $ pad 20 cons ++ printf "%.4f" f
@@ -68,10 +78,10 @@ crunchAux opts (r:rs) d
                            (d { _tmpDropped = _tmpDropped d + 1})
   where
     eligible :: Opts -> Result -> Bool
-    eligible (Opts minIdx maxIdx False) r
+    eligible (Opts minIdx maxIdx False p) r
       = let dI = _astDiffIdx (_astInfo r)
          in minIdx <= dI && dI <= maxIdx
-    eligible (Opts minIdx maxIdx True) r
+    eligible (Opts minIdx maxIdx True p) r
       = case _tokDIdx r of
            Nothing       -> False
            Just (_ , dI) -> minIdx <= dI && dI <= maxIdx      
