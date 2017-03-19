@@ -1,0 +1,45 @@
+#! /bin/bash
+
+function showUsage() {
+    echo "usage: getRepoData <path/to/repo> [opts to hsglc]"
+  echo ""
+  echo "Runs hsglc in every hs file on the repository."
+  echo "Appends all outputs to repo.out"
+}
+
+if [[ $# -ge 1 ]]; then
+  REPO=$1
+  shift
+  GLC="$(pwd)/dist/build/hsglc/hsglc crawl"
+  REST=$@
+else
+  showUsage
+  exit 1
+fi
+
+CURR=$(pwd)
+OUT=$CURR/data/$(basename "$REPO").out
+
+mkdir -p data
+
+if [[ -e $OUT ]]; then
+  read -p "File $OUT already exist. Overwrite? [Y/n] " ans
+  case $ans in
+    Y) rm "$OUT"
+    ;;
+    *) echo "aborting, then."
+       exit 1
+    ;;
+  esac
+fi
+
+cd "$REPO" || exit
+
+if [[ ! $(git status) ]]; then
+  echo "Not a repo!"
+  exit 1
+fi
+
+find ./ -name "*.hs" -exec $GLC $REST {} >> "$OUT" \;
+
+cd "$CURR" || exit
