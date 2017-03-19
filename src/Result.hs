@@ -95,7 +95,7 @@ parseResultLine = either (Left . show) Right . runParser parse1 () ""
         depO <- lexeme parseInt
         return (InfoAST cN dI cC depI depO (li , lo))
 
-    pTOK = Just <$> (try $ (,) <$> parseInt <*> parseFloat)
+    pTOK = Just <$> (try $ (,) <$> lexeme parseInt <*> lexeme parseFloat)
          <|> return Nothing
 
     pResult :: P Result
