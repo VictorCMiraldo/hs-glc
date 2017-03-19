@@ -6,6 +6,7 @@ import System.Exit
 
 import qualified Crawler
 import qualified HsInfo
+import qualified Crunch
 
 usageStr :: [String]
 usageStr = [ "hsglc mode [mode-opts]"
@@ -22,9 +23,10 @@ usageStr = [ "hsglc mode [mode-opts]"
 main :: IO ()
 main = getArgs >>= run
   where
-    run ("crawl":rest) = Crawler.main rest
-    run ("info":rest)  = HsInfo.main rest
-    run _              = hPutStrLn stderr (unlines usageStr)
+    run ("crawl":rest)   = Crawler.main rest
+    run ("crunch":rest)  = Crunch.main rest
+    run ("info":rest)    = HsInfo.main rest
+    run _                = hPutStrLn stderr (unlines usageStr)
 
     
 
